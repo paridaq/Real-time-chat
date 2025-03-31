@@ -1,6 +1,61 @@
+import { useEffect, useState } from "react"
+import { useNavigate } from "react-router-dom"
+
  
  
  function Room(){
+    const[roomCode,setRoomCode] = useState<string>('')
+    const [name,setName] = useState<string>('');
+    const navigate = useNavigate();
+
+
+const ws = new WebSocket('ws://localhost:8080')
+useEffect(()=>{
+    ws.onopen = () => {
+        console.log("WebSocket connection established");
+    };
+
+})
+
+const createRoom = ()=>{
+    
+        
+        if(ws.readyState===WebSocket.OPEN){
+            ws.send(JSON.stringify({type:"create-room"}))
+        }
+
+    
+    ws.onmessage=(event)=>{
+      const data = JSON.parse(event.data)
+      if(data.type==='room-created'){
+        setRoomCode(data.roomCode)
+        
+      }
+    }
+    ws.onerror=(error)=>{
+        console.log(error)
+    }
+    ws.onclose=()=>{
+        console.log('websocket connection closed')
+    }
+
+}
+
+const joinRoom=()=>{
+    
+        ws.send(JSON.stringify({type:"join-room",roomCode,name}))
+        ws.onmessage=(event)=>{
+            const data = JSON.parse(event.data);
+            if(data.type ==="joined-room"){
+                console.log('room joined succesfully')
+                navigate('/chat')
+            }
+        }
+    
+}
+
+
+
     return(
         <>
         <style>
@@ -66,10 +121,19 @@
         <div className="room-container">
               <h1 className="room-title">Real Time Chat</h1>
               <p className="room-subtitle">Temporary room that expires after all users exit</p>
-              <button className="create-room-button">Create New Room</button>
-              <input className="input-field" type="text" placeholder="Enter your name" />
-              <input className="input-field" type="text" placeholder="Enter Room Code" />
-              <button className="join-room-button">Join Room</button>
+              <button className="create-room-button" onClick={createRoom}>Create New Room</button>
+                {roomCode && <p style={{color:"black"}}>{roomCode}</p>}
+              <input className="input-field"
+               type="text"
+                placeholder="Enter your name"
+                value={name}
+                onChange={(e)=>setName(e.target.value)} />
+              <input className="input-field"
+               type="text"
+                placeholder="Enter Room Code"
+                value={roomCode}
+                onChange={(e)=>setRoomCode(e.target.value)} />
+              <button className="join-room-button" onClick={joinRoom}>Join Room</button>
          </div>   
                </>
     )

@@ -2,6 +2,7 @@ import express from 'express'
 import {Request,Response} from 'express'
 import WebSocket ,{WebSocketServer} from "ws"
 import http from 'http'
+import { json } from 'stream/consumers';
 
 
 const app =express();
@@ -20,10 +21,12 @@ const wss = new WebSocketServer({server});
 const rooms = new Map();
 
 wss.on('connection',(ws)=>{
+    console.log('websocket connection established')
     ws.on('message',(message)=>{
         const data = JSON.parse(message.toString());
 
-        if(data.type === 'createRoom'){
+        if(data.type === 'create-room'){
+            try{
             const roomCode = Math.random().toString(36).substr(2, 6).toUpperCase();
             rooms.set(roomCode,{
                 clients:new Set(),
@@ -31,10 +34,15 @@ wss.on('connection',(ws)=>{
             });
             //JSON.stringify convert java script object into json 
             //as we can not send 
-            ws.send(JSON.stringify({type:'roomcreated',roomCode}))
+            ws.send(JSON.stringify({type:'room-created',roomCode}))
+            console.log(rooms)
+        }catch(error){
+            console.log(error)
+            ws.send(JSON.stringify({type:'eror',message:'failed to create the code'}))
+        }
         }
 
-        if (data.type === 'joinRoom') {
+        if (data.type === 'join-room') {
             const { roomCode, username } = data;
 
             if (rooms.has(roomCode)) {
@@ -44,7 +52,7 @@ wss.on('connection',(ws)=>{
                     room.clients.add({ username, ws });
 
                     ws.send(JSON.stringify({ 
-                        type: 'roomJoined', 
+                        type: 'joined-room', 
                         roomCode, 
                         messages: room.messages // Send chat history to new user
                     }));
@@ -60,6 +68,7 @@ wss.on('connection',(ws)=>{
                             }));
                         }
                     }
+                    console.log(rooms)
                 } else {
                     ws.send(JSON.stringify({ type: 'error', message: 'Room is full' }));
                 }
@@ -83,33 +92,39 @@ wss.on('connection',(ws)=>{
                 }
             }
         }
-
+    })
+  // ws close calls when user disconect from the server
         //handle room deetion case
-        ws.on('close', () => {
-            for (const [roomCode, room] of rooms) {
-                const userToRemove = [...room.clients].find(client => client.ws === ws);
-                if (userToRemove) {
-                    room.clients.delete(userToRemove);
-    
-                    // Notify remaining users that someone left
-                    for (const client of room.clients) {
-                        if (client.ws.readyState === WebSocket.OPEN) {
-                            client.ws.send(JSON.stringify({
-                                type: 'userLeft',
-                                sender: "System",
-                                text: `${userToRemove.username} has left the room`,
-                                users: [...room.clients].map(u => u.username)
-                            }));
-                        }
-                    }
-    
-                    if (room.clients.size === 0) rooms.delete(roomCode);
-                    break;
+  // Handle Disconnection
+ // thi block auomatically calls when user disconnects
+  ws.on('close', () => {
+    for (const [roomCode, room] of rooms) {
+        //find the user whose websocket connection is closed
+        const userToRemove = [...room.clients].find(client => client.ws === ws);
+        if (userToRemove) {
+            room.clients.delete(userToRemove);
+
+            // Notify remaining users that someone left
+            for (const client of room.clients) {
+                if (client.ws.readyState === WebSocket.OPEN) {
+                    client.ws.send(JSON.stringify({
+                        type: 'userLeft',
+                        sender: "System",
+                        text: `${userToRemove.username} has left the room`,
+                        users: [...room.clients].map(u => u.username)
+                    }));
                 }
             }
 
-    })
+            if (room.clients.size === 0) rooms.delete(roomCode);
+            break;
+        }
+    }
+});
+
+
+
 })
 
 
-})
+
