@@ -22,6 +22,7 @@ const rooms = new Map();
 
 wss.on('connection',(ws)=>{
     console.log('websocket connection established')
+    console.log(`New client connected. Total clients: ${wss.clients.size}`);
     ws.on('message',(message)=>{
         const data = JSON.parse(message.toString());
 
@@ -30,7 +31,7 @@ wss.on('connection',(ws)=>{
             const roomCode = Math.random().toString(36).substr(2, 6).toUpperCase();
             rooms.set(roomCode,{
                 clients:new Set(),
-                messages:[{sender:"system",text:"Room created Succesfully"}]
+                messages:[{name:"system",text:"Room created Succesfully"}]
             });
             //JSON.stringify convert java script object into json 
             //as we can not send 
@@ -43,28 +44,33 @@ wss.on('connection',(ws)=>{
         }
 
         if (data.type === 'join-room') {
-            const { roomCode, username } = data;
+            const { roomCode, name } = data;
 
             if (rooms.has(roomCode)) {
                 const room = rooms.get(roomCode);
 
                 if (room.clients.size < 6) {
-                    room.clients.add({ username, ws });
+                    room.clients.add({ name, ws });
+                    console.log(room)
 
                     ws.send(JSON.stringify({ 
                         type: 'joined-room', 
                         roomCode, 
-                        messages: room.messages // Send chat history to new user
+                        name,
+                    message: room.messages // Send chat history to new user
                     }));
+                    console.log(room.messages)
 
                     // Notify all users in the room about the new user
                     for (const client of room.clients) {
                         if (client.ws.readyState === WebSocket.OPEN) {
                             client.ws.send(JSON.stringify({
+                                roomCode,
+                                name,
                                 type: 'userJoined',
                                 sender: "System",
-                                text: `${username} joined the room`,
-                                users: [...room.clients].map(u => u.username) // Updated user list
+                                text: `${name} joined the room`,
+                                users: [...room.clients].map(u => u.name) // Updated user list
                             }));
                         }
                     }
@@ -76,20 +82,40 @@ wss.on('connection',(ws)=>{
                 ws.send(JSON.stringify({ type: 'error', message: 'Room not found' }));
             }
         }
-        if(data.type==='message'){
-            const {roomCode,sender,text} = data;
+        //check if the room exist and retun all the messages inside the rooom
+        if(data.type==='room-messages'){
+            const {roomCode} = data;
             if(rooms.has(roomCode)){
                 const room = rooms.get(roomCode)
-                const msgdata = {sender,text}
+                ws.send(JSON.stringify({
+                  type:'found-messages',
+                  message:room.messages
+                }))
+                console.log(room.messages)
+            }
+        }
+
+        // this
+        if(data.type==='message'){
+            const {roomCode,username,text} = data;
+            if(rooms.has(roomCode)){
+                const room = rooms.get(roomCode)
+                const msgdata = {name:username,text}
                 room.messages.push(msgdata)
+                ws.send(JSON.stringify({...msgdata}))
+
+
+                /*
                 for(const client of room.clients){
+                    console.log(`Client WebSocket state: ${client.ws.readyState}`);
                     if(client.ws.readyState==WebSocket.OPEN){
                         client.ws.send(JSON.stringify({
-                            type:'message',
+                            type:'message-re',
                             ...msgdata
                         }))
                     }
                 }
+                    */
             }
         }
     })
@@ -104,7 +130,7 @@ wss.on('connection',(ws)=>{
         if (userToRemove) {
             room.clients.delete(userToRemove);
 
-            // Notify remaining users that someone left
+            // Notify remaining users that someone left and find the user who left
             for (const client of room.clients) {
                 if (client.ws.readyState === WebSocket.OPEN) {
                     client.ws.send(JSON.stringify({

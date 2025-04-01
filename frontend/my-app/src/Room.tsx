@@ -9,7 +9,7 @@ import { useNavigate } from "react-router-dom"
     const navigate = useNavigate();
 
 
-const ws = new WebSocket('ws://localhost:8080')
+const ws = new WebSocket('http://localhost:8080')
 useEffect(()=>{
     ws.onopen = () => {
         console.log("WebSocket connection established");
@@ -49,6 +49,9 @@ const joinRoom=()=>{
             if(data.type ==="joined-room"){
                 console.log('room joined succesfully')
                 navigate('/chat')
+                localStorage.setItem('room-code',data.roomCode)
+                localStorage.setItem('user-name',data.name)
+                
             }
         }
     
